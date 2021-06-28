@@ -1,4 +1,4 @@
-package com.kastro;
+package com.kastro.lesson3;
 
 import com.kastro.lesson3.Apple;
 import com.kastro.lesson3.Box;
