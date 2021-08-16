@@ -7,17 +7,18 @@ package com.kastro.lesson6;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kastro.lesson6.dao.WeatherDao;
 import com.kastro.lesson6.weatherdto.Forecast;
 import com.kastro.lesson6.weatherdto.ForecastInfo;
 import com.kastro.lesson6.weatherdto.TemperatureInfo;
 import com.kastro.lesson6.weatherdto.WeatherResponse;
-import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 
 import java.io.IOException;
+import java.util.List;
 
 public class Main {
 
@@ -27,30 +28,31 @@ public class Main {
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
     public static void main(String[] args) {
-        HttpEntity httpEntity = requestWeather();
-        if (httpEntity == null) {
+        withDb();
+//        withoutDb();
+    }
+
+    public static void withoutDb() {
+        WeatherResponse weatherResponse = requestWeather();
+        if (weatherResponse == null) {
             System.out.println("Сервис погоды не отвечает");
             return;
         }
-        try {
-            WeatherResponse weatherResponse = OBJECT_MAPPER.readValue(httpEntity.getContent(), WeatherResponse.class);
-            for (Forecast forecast: weatherResponse.getForecasts()) {
-                ForecastInfo day = forecast.getDay();
-                String dayPrecipitation = day.getHasPrecipitation() ? "" : "не";
-                ForecastInfo night = forecast.getNight();
-                String nightPrecipitation = night.getHasPrecipitation() ? "" : "не";
-                TemperatureInfo minimum = forecast.getTemperature().getMinimum();
-                TemperatureInfo maximum = forecast.getTemperature().getMaximum();
-                System.out.println(String.format(WEATHER_MESSAGE, forecast.getDate(), day.getPhrase(), dayPrecipitation,
-                        night.getPhrase(), nightPrecipitation, minimum.getValue(), minimum.getUnit(),
-                        maximum.getValue(), maximum.getUnit()));
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        printWeather(weatherResponse.getForecasts());
     }
 
-    private static HttpEntity requestWeather() {
+    public static void withDb() {
+        WeatherResponse weatherResponse = requestWeather();
+        if (weatherResponse == null) {
+            System.out.println("Сервис погоды не отвечает");
+            return;
+        }
+        WeatherDao weatherDao = new WeatherDao();
+        weatherDao.save(weatherResponse.getForecasts());
+        printWeather(weatherDao.read());
+    }
+
+    private static WeatherResponse requestWeather() {
         try (CloseableHttpClient client = HttpClients.createDefault()) {
             String url = String.format("https://dataservice.accuweather.com/forecasts/v1/daily/5day/294021?apikey=%s&language=ru-ru&metric=true",
                     WEATHER_API_KEY);
@@ -59,11 +61,29 @@ public class Main {
             getWeatherRequest.addHeader("accept", "application/json");
 
             CloseableHttpResponse weatherResult = client.execute(getWeatherRequest);
-            return weatherResult.getEntity();
+            return OBJECT_MAPPER.readValue(weatherResult.getEntity().getContent(), WeatherResponse.class);
         } catch (IOException e) {
             System.out.println("Ошибка вызова сервиса погоды");
             e.printStackTrace();
         }
         return null;
+    }
+
+    private static void printWeather(Forecast forecast) {
+        ForecastInfo day = forecast.getDay();
+        String dayPrecipitation = day.getHasPrecipitation() ? "" : "не";
+        ForecastInfo night = forecast.getNight();
+        String nightPrecipitation = night.getHasPrecipitation() ? "" : "не";
+        TemperatureInfo minimum = forecast.getTemperature().getMinimum();
+        TemperatureInfo maximum = forecast.getTemperature().getMaximum();
+        System.out.println(String.format(WEATHER_MESSAGE, forecast.getDate(), day.getPhrase(), dayPrecipitation,
+                night.getPhrase(), nightPrecipitation, minimum.getValue(), minimum.getUnit(),
+                maximum.getValue(), maximum.getUnit()));
+    }
+
+    private static void printWeather(List<Forecast> forecasts) {
+        for (Forecast forecast : forecasts) {
+            printWeather(forecast);
+        }
     }
 }
